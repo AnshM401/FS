@@ -5,7 +5,7 @@ import Modal from "../components/Modal";
 function Home() {
   const [selectedBook, setSelectedBook] = useState(null);
 
-  const books = [
+  const [books, setBooks] = useState([
     {
       title: "The Great Gatsby",
       author: "F. Scott Fitzgerald",
@@ -24,8 +24,19 @@ function Home() {
       status: "Available",
       isbn: "978-0547928227"
     }
-  ];
+  ]);
 
+  const handleBorrow = (book) => {
+    setBooks((currentBooks) =>
+      currentBooks.map((item) =>
+        item.isbn === book.isbn
+          ? { ...item, status: "Borrowed" }
+          : item
+      )
+    );
+  
+    setSelectedBook(null);
+  };
   return (
     <div className="min-h-screen bg-slate-100">
 
@@ -102,9 +113,10 @@ function Home() {
 
       {/* Modal */}
       <Modal
-        book={selectedBook}
-        onClose={() => setSelectedBook(null)}
-      />
+  book={selectedBook}
+  onClose={() => setSelectedBook(null)}
+  onBorrow={handleBorrow}
+/>
 
     </div>
   );
