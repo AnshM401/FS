@@ -1,4 +1,4 @@
-
+import MyBorrowedBooks from "./pages/MyBorrowedBooks";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
@@ -12,6 +12,10 @@ function App() {
         <Navbar />
 
         <Routes>
+          <Route
+  path="/my-books"
+  element={<MyBorrowedBooks />}
+/>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
         </Routes>
