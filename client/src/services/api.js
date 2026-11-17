@@ -1,9 +1,12 @@
 
+
+
+  
 const BASE_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000";
 
-const API_URL = `${BASE_URL}/api/books`;
+const API_URL = BASE_URL + "/api/books";
 
 // GET: Fetch all books
 export async function getBooks() {
@@ -17,10 +20,10 @@ export async function getBooks() {
   return data;
 }
 
-// PUT: Update a book using MongoDB ID
+// PUT: Update a book
 export async function updateBook(bookId, updatedData) {
   const response = await fetch(
-    `${API_URL}/${encodeURIComponent(bookId)}`,
+    API_URL + "/" + encodeURIComponent(bookId),
     {
       method: "PUT",
       headers: {
@@ -38,4 +41,3 @@ export async function updateBook(bookId, updatedData) {
 
   return data.book;
 }
-
