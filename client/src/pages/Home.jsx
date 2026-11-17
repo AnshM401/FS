@@ -9,9 +9,10 @@ function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [availability, setAvailability] = useState("All Books");
 
-  const { books, borrowBook } = useLibrary();
+  // Get shared book data and functions from LibraryContext
+  const { books, borrowBook, loading, error } = useLibrary();
 
-  // Search books by title, author, or ISBN.
+  // Search and filter books
   const filteredBooks = books.filter((book) => {
     const search = searchTerm.toLowerCase();
 
@@ -27,10 +28,13 @@ function Home() {
     return matchesSearch && matchesAvailability;
   });
 
-  // Borrow a book using the shared Context state.
-  const handleBorrow = (book) => {
-    borrowBook(book.isbn);
-    setSelectedBook(null);
+  // Borrow a book through the backend API
+  const handleBorrow = async (book) => {
+    const updatedBook = await borrowBook(book.isbn);
+
+    if (updatedBook) {
+      setSelectedBook(null);
+    }
   };
 
   return (
@@ -86,7 +90,18 @@ function Home() {
             {filteredBooks.length} book(s) found
           </p>
 
-          {filteredBooks.length > 0 ? (
+          {/* Loading, Error and Book Display */}
+          {loading ? (
+            <p className="mt-8 text-center text-slate-600">
+              Loading books from server...
+            </p>
+
+          ) : error ? (
+            <p className="mt-8 rounded-lg bg-red-100 p-6 text-center text-red-700">
+              Error: {error}
+            </p>
+
+          ) : filteredBooks.length > 0 ? (
             <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 
               {filteredBooks.map((book) => (
@@ -98,6 +113,7 @@ function Home() {
               ))}
 
             </div>
+
           ) : (
             <p className="mt-8 rounded-lg bg-white p-8 text-center text-slate-600 shadow">
               No books match your search. Try another title or filter.
@@ -107,7 +123,7 @@ function Home() {
         </div>
       </section>
 
-      {/* Pagination - visual placeholder for now */}
+      {/* Pagination - Visual Placeholder */}
       <section className="pb-12 text-center">
         <button className="mx-1 rounded-lg bg-indigo-600 px-4 py-2 text-white">
           1

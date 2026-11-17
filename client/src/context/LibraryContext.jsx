@@ -6,69 +6,95 @@ import {
   useState,
 } from "react";
 
+import { getBooks } from "../services/api";
+import {
+  borrowBookById,
+  returnBookById,
+} from "../services/borrowApi";
+
 const LibraryContext = createContext(null);
 
-const initialBooks = [
-  {
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    status: "Available",
-    isbn: "978-0743273565",
-  },
-  {
-    title: "1984",
-    author: "George Orwell",
-    status: "Borrowed",
-    isbn: "978-0451524935",
-  },
-  {
-    title: "The Hobbit",
-    author: "J.R.R. Tolkien",
-    status: "Available",
-    isbn: "978-0547928227",
-  },
-];
-
 export function LibraryProvider({ children }) {
-  const [books, setBooks] = useState(() => {
-    try {
-      const savedBooks = localStorage.getItem("library-books");
-      return savedBooks ? JSON.parse(savedBooks) : initialBooks;
-    } catch {
-      return initialBooks;
-    }
-  });
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Save book changes so they survive a page refresh.
   useEffect(() => {
-    localStorage.setItem("library-books", JSON.stringify(books));
-  }, [books]);
+    let active = true;
 
-  // Borrow an available book.
-  const borrowBook = (isbn) => {
-    setBooks((currentBooks) =>
-      currentBooks.map((book) =>
-        book.isbn === isbn && book.status === "Available"
-          ? { ...book, status: "Borrowed" }
-          : book
-      )
+    async function loadBooks() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await getBooks();
+
+        if (active) {
+          setBooks(data);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err.message);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadBooks();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const changeBookStatus = async (isbn, action) => {
+    const currentBook = books.find(
+      (book) => book.isbn === isbn
     );
+
+    if (!currentBook) return null;
+
+    try {
+      setError("");
+
+      const updatedBook =
+        action === "borrow"
+          ? await borrowBookById(currentBook._id)
+          : await returnBookById(currentBook._id);
+
+      setBooks((currentBooks) =>
+        currentBooks.map((book) =>
+          book._id === updatedBook._id
+            ? updatedBook
+            : book
+        )
+      );
+
+      return updatedBook;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    }
   };
 
-  // Return a borrowed book.
-  const returnBook = (isbn) => {
-    setBooks((currentBooks) =>
-      currentBooks.map((book) =>
-        book.isbn === isbn && book.status === "Borrowed"
-          ? { ...book, status: "Available" }
-          : book
-      )
-    );
-  };
+  const borrowBook = (isbn) =>
+    changeBookStatus(isbn, "borrow");
+
+  const returnBook = (isbn) =>
+    changeBookStatus(isbn, "return");
 
   return (
     <LibraryContext.Provider
-      value={{ books, borrowBook, returnBook }}
+      value={{
+        books,
+        loading,
+        error,
+        borrowBook,
+        returnBook,
+      }}
     >
       {children}
     </LibraryContext.Provider>

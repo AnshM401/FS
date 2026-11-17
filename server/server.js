@@ -1,173 +1,101 @@
 
+const dns = require("node:dns");
+const http = require("http");
+const { Server } = require("socket.io");
+
+// Keep existing MongoDB DNS configuration
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 
+const connectDB = require("./config/db");
+const bookRoutes = require("./routes/bookRoutes");
+const authRoutes = require("./routes/authRoutes");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const CLIENT_URL =
+  process.env.CLIENT_URL || "http://localhost:5173";
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Temporary book data for API testing.
-// We will connect a database later.
-let books = [
-  {
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    status: "Available",
-    isbn: "978-0743273565",
-  },
-  {
-    title: "1984",
-    author: "George Orwell",
-    status: "Borrowed",
-    isbn: "978-0451524935",
-  },
-  {
-    title: "The Hobbit",
-    author: "J.R.R. Tolkien",
-    status: "Available",
-    isbn: "978-0547928227",
-  },
-];
+// Create HTTP server for Express and Socket.IO
+const httpServer = http.createServer(app);
 
-// Check that the API is running
+// Configure Socket.IO
+const io = new Server(httpServer, {
+  cors: {
+    origin: CLIENT_URL,
+    methods: ["GET", "POST"],
+  },
+});
+
+// Make Socket.IO accessible in routes
+app.set("io", io);
+
+// Handle Socket.IO connections
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  socket.on("disconnect", (reason) => {
+    console.log(
+      "User disconnected:",
+      socket.id,
+      "Reason:",
+      reason
+    );
+  });
+});
+
+// Authentication API
+app.use("/api/auth", authRoutes);
+
+// Check API status
 app.get("/", (req, res) => {
-  res.json({ message: "Library Management API is running!" });
-});
-
-// GET: Retrieve all books
-app.get("/api/books", (req, res) => {
-  res.status(200).json(books);
-});
-
-// GET: Retrieve one book by ISBN
-app.get("/api/books/:isbn", (req, res) => {
-  const book = books.find(
-    (item) => item.isbn === req.params.isbn
-  );
-
-  if (!book) {
-    return res.status(404).json({
-      message: "Book not found",
-    });
-  }
-
-  res.status(200).json(book);
-});
-
-// POST: Add a new book
-app.post("/api/books", (req, res) => {
-  const { title, author, isbn, status = "Available" } = req.body;
-
-  if (
-    typeof title !== "string" || !title.trim() ||
-    typeof author !== "string" || !author.trim() ||
-    typeof isbn !== "string" || !isbn.trim()
-  ) {
-    return res.status(400).json({
-      message: "Title, author, and ISBN are required",
-    });
-  }
-
-  if (!["Available", "Borrowed"].includes(status)) {
-    return res.status(400).json({
-      message: "Status must be Available or Borrowed",
-    });
-  }
-
-  if (books.some((item) => item.isbn === isbn.trim())) {
-    return res.status(409).json({
-      message: "A book with this ISBN already exists",
-    });
-  }
-
-  const newBook = {
-    title: title.trim(),
-    author: author.trim(),
-    isbn: isbn.trim(),
-    status,
-  };
-
-  books.push(newBook);
-
-  res.status(201).json({
-    message: "Book added successfully",
-    book: newBook,
+  res.json({
+    message: "Library Management API is running!",
   });
 });
 
-// PUT: Update an existing book
-app.put("/api/books/:isbn", (req, res) => {
-  const bookIndex = books.findIndex(
-    (item) => item.isbn === req.params.isbn
-  );
+// Book API routes
+app.use("/api/books", bookRoutes);
 
-  if (bookIndex === -1) {
-    return res.status(404).json({
-      message: "Book not found",
-    });
-  }
-
-  const { title, author, status } = req.body;
-
-  if (
-    typeof title !== "string" || !title.trim() ||
-    typeof author !== "string" || !author.trim() ||
-    !["Available", "Borrowed"].includes(status)
-  ) {
-    return res.status(400).json({
-      message: "Valid title, author, and status are required",
-    });
-  }
-
-  books[bookIndex] = {
-    ...books[bookIndex],
-    title: title.trim(),
-    author: author.trim(),
-    status,
-  };
-
-  res.status(200).json({
-    message: "Book updated successfully",
-    book: books[bookIndex],
+// Handle unknown routes
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route not found",
   });
 });
 
-// DELETE: Remove a book
-app.delete("/api/books/:isbn", (req, res) => {
-  const bookIndex = books.findIndex(
-    (item) => item.isbn === req.params.isbn
-  );
-
-  if (bookIndex === -1) {
-    return res.status(404).json({
-      message: "Book not found",
-    });
-  }
-
-  const deletedBook = books[bookIndex];
-
-  books = books.filter(
-    (item) => item.isbn !== req.params.isbn
-  );
-
-  res.status(200).json({
-    message: "Book deleted successfully",
-    book: deletedBook,
-  });
-});
-
-// Handle unexpected server errors
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err);
 
-  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+  if (
+    err instanceof SyntaxError &&
+    err.status === 400 &&
+    "body" in err
+  ) {
     return res.status(400).json({
       message: "Invalid JSON request body",
+    });
+  }
+
+  if (err.name === "ValidationError") {
+    return res.status(400).json({
+      message: err.message,
+    });
+  }
+
+  if (err.code === 11000) {
+    return res.status(409).json({
+      message: "Duplicate book ISBN",
     });
   }
 
@@ -176,6 +104,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Library API running at http://localhost:${PORT}`);
+// Connect database before starting server
+connectDB().then(() => {
+  httpServer.listen(PORT, () => {
+    console.log(
+      `Library API running at http://localhost:${PORT}`
+    );
+    console.log("Socket.IO server is ready!");
+  });
 });
